@@ -26,4 +26,4 @@ jobs:
         run: chmod 700 ./gradlew
 
       - name: Build
-        run: ./gradlew build
+        run: ./gradlew build -Xlint:deprecation

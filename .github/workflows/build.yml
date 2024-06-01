@@ -22,5 +22,8 @@ jobs:
           distribution: "microsoft"
           cache: "gradle"
 
+      - name: Grant Write Permissions to gradlew script
+        run: chmod 700 ./gradlew
+
       - name: Build
         run: ./gradlew build

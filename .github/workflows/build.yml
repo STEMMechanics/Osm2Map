@@ -25,5 +25,8 @@ jobs:
       - name: Grant Write Permissions to gradlew script
         run: chmod 700 ./gradlew
 
+      - name: Setup Gradle
+        run: ./gradlew
+
       - name: Build
         run: ./gradlew build

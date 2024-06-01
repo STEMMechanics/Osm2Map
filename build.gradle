@@ -12,6 +12,10 @@ compileJava.options.encoding = 'UTF-8'
 
 sourceCompatibility = 1.21
 
+tasks.withType(JavaCompile).configureEach {
+    options.deprecation = true
+}
+
 repositories {
     mavenCentral()
     maven {

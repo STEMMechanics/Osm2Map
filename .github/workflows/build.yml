@@ -1,0 +1,26 @@
+name: Build OSM2Map
+
+on:
+  - push
+  - workflow_dispatch
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: "Build OSM2Map"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout
+        with:
+          submodules: recursive
+
+      - name: Setup Java SDK
+        uses: actions/setup-java
+        with:
+          java-version: 21
+          distribution: "microsoft"
+          cache: "gradle"
+
+      - name: Build
+        run: ./gradlew build

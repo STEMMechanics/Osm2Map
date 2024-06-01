@@ -2,7 +2,7 @@
 
 Osm2Map is only available for `Spigot 1.12.2` for now
 
-[Download Here](https://github.com/Wardenfar/Osm2Map/releases)
+[Download Here](https://github.com/STEMMechanics/Osm2Map/releases)
 
 ### Features
 - **Custom World Generator** based on OpenStreetMap data

@@ -1,54 +1,29 @@
 package com.wardenfar.osm2map.pluginInterface;
 
-import com.wardenfar.osm2map.Util;
-import org.bukkit.Material;
-import org.bukkit.material.MaterialData;
+import com.sk89q.worldedit.bukkit.BukkitAdapter;
+import com.sk89q.worldedit.world.block.BaseBlock;
+import org.bukkit.block.data.BlockData;
 
 public class BukkitInterface extends Interface {
+    private final SchemInterface schematics = new SchemInterface();
 
-    public BukkitInterface() {
-        Util.createMap();
-    }
+    @Override
+    public BlockData getBlock(int id) { return fromBlock(schematics.getBlock(id)); }
 
-    private Object getMaterialData(int id, int data) {
-        return new MaterialData(Material.getMaterial(id), (byte) data);
+    @Override
+    public BlockData getBlock(int id, int variant) { return fromBlock(schematics.getBlock(id, variant)); }
+
+    @Override
+    public BlockData getBlock(String id) { return fromBlock(schematics.getBlock(id)); }
+
+    @Override
+    public BlockData fromBlock(BaseBlock block) { return BukkitAdapter.adapt(block.toImmutableState()); }
+
+    @Override
+    public boolean isAir(Object block) {
+        return block instanceof BlockData && ((BlockData) block).getMaterial().isAir();
     }
 
     @Override
-    public Object getBlock(int id) {
-        return getMaterialData(id, 0);
-    }
-
-    @Override
-    public Object getBlock(int id, int variant) {
-        return getMaterialData(id, variant);
-    }
-
-    @Override
-    public Object getBlock(String id) {
-        Integer intId = Util.getBlockId(id);
-        Integer varId = Util.getVariantId(id);
-        if (intId == null) {
-            return null;
-        }
-        return getBlock(intId, varId);
-    }
-
-    @Override
-    public Integer getBlockId(Object block) {
-        if (block instanceof MaterialData) {
-            MaterialData md = (MaterialData) block;
-            return getBlockId(md.getItemType());
-        }
-        return null;
-    }
-
-    public Integer getBlockId(Material block) {
-        return block.getId();
-    }
-
-    @Override
-    public Class getBlockClass() {
-        return MaterialData.class;
-    }
+    public Class<?> getBlockClass() { return BlockData.class; }
 }

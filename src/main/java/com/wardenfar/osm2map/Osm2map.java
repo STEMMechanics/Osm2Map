@@ -1,6 +1,6 @@
 package com.wardenfar.osm2map;
 
-import com.boydti.fawe.FaweAPI;
+import com.fastasyncworldedit.core.FaweAPI;
 import com.flowpowered.math.vector.Vector3d;
 import com.flowpowered.math.vector.Vector3i;
 import com.sk89q.intake.dispatcher.Dispatcher;
@@ -21,7 +21,6 @@ import com.wardenfar.osm2map.pluginInterface.Interface;
 import com.wardenfar.osm2map.request.RequestManager;
 import com.wardenfar.osm2map.terrainGeneration.OsmElevGenerator;
 import com.wardenfar.osm2map.tile.Tiles;
-import li.l1t.common.CommandRegistrationManager;
 import li.l1t.common.intake.CommandsManager;
 import li.l1t.common.intake.IntakeCommand;
 import net.md_5.bungee.api.ChatColor;
@@ -61,7 +60,7 @@ import static com.wardenfar.osm2map.Util.sendMessage;
 
 public class Osm2map extends JavaPlugin implements Listener {
 
-    public static String VERSION = "3.2";
+    public static String VERSION = "4.0.0";
 
     public static int POI_PAGE_SIZE = 15;
 
@@ -69,17 +68,17 @@ public class Osm2map extends JavaPlugin implements Listener {
     private Worlds worlds;
 
     private Interface inter;
-    private Map<Class<?>, Map<Vector3i, Object>> blocksByInterfaceBlockType = new HashMap<>();
+    private Map<String, Map<Class<?>, Map<Vector3i, Object>>> blocksByWorld = new java.util.concurrent.ConcurrentHashMap<>();
 
     private OsmElevGenerator osmElevGenerator;
 
     private RequestManager requestManager;
 
     private String[] blacklistedPlaceBlocksIDs = new String[]{
-            "minecraft:powered_comparator",
+            "minecraft:comparator",
             "minecraft:redstone_wire",
             "minecraft:redstone_torch",
-            "minecraft:powered_repeater",
+            "minecraft:repeater",
             "minecraft:observer",
             "minecraft:piston",
             "minecraft:sticky_piston",
@@ -88,13 +87,11 @@ public class Osm2map extends JavaPlugin implements Listener {
             "minecraft:fire",
             "minecraft:redstone_block",
             "minecraft:lava",
-            "minecraft:flowing_lava",
             "minecraft:water",
-            "minecraft:flowing_water",
-            "minecraft:portal",
+            "minecraft:nether_portal",
             "minecraft:end_portal",
             "minecraft:rail",
-            "minecraft:golden_rail",
+            "minecraft:powered_rail",
             "minecraft:detector_rail",
             "minecraft:activator_rail",
             "minecraft:command_block",
@@ -110,7 +107,7 @@ public class Osm2map extends JavaPlugin implements Listener {
             Material.BUCKET,
             Material.WATER_BUCKET,
             Material.LAVA_BUCKET,
-            Material.FIREBALL,
+            Material.FIRE_CHARGE,
             Material.ACTIVATOR_RAIL
     };
     private Class<?>[] whitelistEntityClasses = new Class[]{
@@ -121,6 +118,7 @@ public class Osm2map extends JavaPlugin implements Listener {
     @Override
     public void onDisable() {
         getLogger().info("Close Database");
+        if (worlds == null) return;
         for (World world : worlds.worlds) {
             if (world.db != null) {
                 world.db.close();
@@ -140,7 +138,8 @@ public class Osm2map extends JavaPlugin implements Listener {
         if (!isGuardActive(p.getWorld())) {
             return;
         }
-        Material type = p.getItemInHand().getType();
+        if (event.getItem() == null) return;
+        Material type = event.getItem().getType();
 
         boolean found = false;
         for (Material m : blacklistedItemsIDs) {
@@ -188,6 +187,10 @@ public class Osm2map extends JavaPlugin implements Listener {
         if (!event.isCancelled()) {
             World world = worlds.getWorld(event.getEntity().getWorld().getName());
             if (world != null) {
+                if (event.getPlayer() == null) {
+                    event.setCancelled(true);
+                    return;
+                }
                 String playerName = event.getPlayer().getName();
                 if (world.mapData.getModos().contains(playerName)) {
                     event.setCancelled(false);
@@ -224,7 +227,7 @@ public class Osm2map extends JavaPlugin implements Listener {
 
         World world = getWorlds().getWorld(event.getWorld().getName());
 
-        if (world != null && world.forceInitSave) {
+        if (world != null && world.init && world.forceInitSave) {
             org.bukkit.World w = getServer().getWorld(world.name);
             Vector2d topLeftBlockPos = world.mapData.project(world.mapData.getTopLeft());
             Vector2d bottomRightBlockPos = world.mapData.project(world.mapData.getBottomRight());
@@ -245,13 +248,12 @@ public class Osm2map extends JavaPlugin implements Listener {
                 w.getWorldBorder().setCenter(centerX, centerZ);
                 w.getWorldBorder().setSize(Math.max(centerX, centerZ) * 2);
                 w.setTime(6000);
-                w.setGameRuleValue("doDaylightCycle", "false");
-                w.setGameRuleValue("keepInventory", "true");
-                w.setGameRuleValue("doWeatherCycle", "false");
-                w.setGameRuleValue("doFireTick", "false");
-                w.setGameRuleValue("mobGriefing", "false");
-                w.setGameRuleValue("spawnRadius", "1");
-                w.setGameRuleValue("mobGriefing", "false");
+                w.setGameRule(org.bukkit.GameRules.ADVANCE_TIME, false);
+                w.setGameRule(org.bukkit.GameRules.KEEP_INVENTORY, true);
+                w.setGameRule(org.bukkit.GameRules.ADVANCE_WEATHER, false);
+                w.setGameRule(org.bukkit.GameRules.FIRE_SPREAD_RADIUS_AROUND_PLAYER, 0);
+                w.setGameRule(org.bukkit.GameRules.MOB_GRIEFING, false);
+                w.setGameRule(org.bukkit.GameRules.RESPAWN_RADIUS, 1);
             }
         }
     }
@@ -309,13 +311,11 @@ public class Osm2map extends JavaPlugin implements Listener {
 
         IntakeCommand command = new IntakeCommand(commandsManager, dispatcher, "o2m", Collections.singletonList("osm2map"));
         commandsManager.applyNamespaceTemplateTo(command.getNamespace());
-        new CommandRegistrationManager().registerCommand(command, commandsManager.getFallbackPrefix());
+        getServer().getCommandMap().register(commandsManager.getFallbackPrefix(), command);
     }
 
     @Override
     public void onEnable() {
-        getServer().getPluginManager().registerEvents(this, this);
-
         try {
             worlds = Util.readOrCreateWorlds(configFile);
 
@@ -326,34 +326,38 @@ public class Osm2map extends JavaPlugin implements Listener {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            getLogger().log(java.util.logging.Level.SEVERE,
+                    "Cannot enable osm2map: failed to load " + configFile, e);
+            getServer().getPluginManager().disablePlugin(this);
+            return;
         }
+        getServer().getPluginManager().registerEvents(this, this);
     }
 
-    public void initWorld(String worldName) {
+    public synchronized void initWorld(String worldName) {
         Logger logger = getLogger();
         World world = getWorlds().getWorld(worldName);
-        if (world != null && !world.init) {
+        if (world != null && !world.init && world.initializationFailure == null) {
             try {
                 Config config = world.config;
 
                 File dbFile = new File(world.config.databaseFile);
 
-                boolean init = world.forceInitSave;
-
-                if (!init) {
-                    logger.info("Read DB ... " + dbFile.getPath());
-                } else {
-                    logger.info("Create DB ..." + dbFile.getPath());
-                }
-
-                Database db = com.wardenfar.osm2map.db.Database.create(dbFile, init);
+                Database db = Database.create(dbFile, false);
                 world.db = db;
-
+                boolean init = world.forceInitSave || db.isEmpty();
                 DBMapData mapData;
                 if (init) {
-                    mapData = DBMapData.readFromOsmXML(this, db, logger, new FileInputStream(new File(config.generation.osmFile)), config.generation.height, config.generation.zoom);
+                    // Open the source before resetting any existing database.
+                    try (FileInputStream input = new FileInputStream(config.generation.osmFile)) {
+                        logger.info("Import OSM into DB ... " + dbFile.getPath());
+                        db.initializeSchema();
+                        mapData = DBMapData.readFromOsmXML(this, db, logger, input,
+                                config.generation.height, config.generation.zoom);
+                    }
+                    world.forceInitSave = true;
                 } else {
+                    logger.info("Read DB ... " + dbFile.getPath());
                     mapData = DBMapData.readFromDB(this, db);
                 }
                 world.mapData = mapData;
@@ -392,12 +396,30 @@ public class Osm2map extends JavaPlugin implements Listener {
                 }
 
                 if (config.tile.active) {
+                    File palette = new File(config.tile.blockColorsFile);
+                    if (!palette.exists()) {
+                        java.nio.file.Files.createDirectories(palette.getAbsoluteFile().getParentFile().toPath());
+                        try (java.io.InputStream input = getResource("groundBlocks.txt")) {
+                            java.nio.file.Files.copy(java.util.Objects.requireNonNull(input), palette.toPath());
+                        }
+                        logger.info("Created default block colours: " + palette);
+                    }
+                    Map<Class<?>, Map<Vector3i, Object>> palettes = new java.util.concurrent.ConcurrentHashMap<>();
+                    palettes.put(getInterface().getBlockClass(), Util.getBlocksColors(palette.getPath(), getInterface()));
+                    blocksByWorld.put(world.name, palettes);
                     world.tiles = new Tiles(this, world.name);
                 }
 
                 world.init = true;
             } catch (Exception e) {
-                e.printStackTrace();
+                world.initializationFailure = e;
+                if (world.db != null) {
+                    world.db.close();
+                    world.db = null;
+                }
+                world.mapData = null;
+                logger.log(java.util.logging.Level.SEVERE,
+                        "Cannot initialize osm2map world '" + worldName + "': " + e.getMessage(), e);
             }
         }
     }
@@ -518,10 +540,7 @@ public class Osm2map extends JavaPlugin implements Listener {
 
         Vector2i pos = new Vector2i(blockPos.getX(), blockPos.getZ());
 
-        Integer idBefore = ((BukkitInterface) inter).getBlockId(before);
-        Integer idAfter = ((BukkitInterface) inter).getBlockId(after);
-
-        if (isInList(Util.getStringId(idAfter), blacklistedPlaceBlocksIDs) || isInList(Util.getStringId(idBefore), blacklistedBreakBlocksIDs)) {
+        if (isInList(after.getKey().toString(), blacklistedPlaceBlocksIDs) || isInList(before.getKey().toString(), blacklistedBreakBlocksIDs)) {
             if (player != null) {
                 sendMessage(player, "BlackListed Block :(", ChatColor.RED);
             }
@@ -546,6 +565,18 @@ public class Osm2map extends JavaPlugin implements Listener {
 
     @Override
     public ChunkGenerator getDefaultWorldGenerator(String worldName, String id) {
+        if (!isEnabled() || worlds == null) {
+            throw new IllegalStateException("osm2map is unavailable: check the startup configuration error");
+        }
+        if (worlds.getWorld(worldName) == null) {
+            return null; // Other plugins probe generators with unconfigured world names.
+        }
+        initWorld(worldName);
+        World configuredWorld = worlds.getWorld(worldName);
+        if (!configuredWorld.init) {
+            throw new IllegalStateException("Cannot provide osm2map generator for '" + worldName
+                    + "': map initialization failed", configuredWorld.initializationFailure);
+        }
         if (osmElevGenerator == null) {
             osmElevGenerator = new OsmElevGenerator(this);
         }
@@ -588,14 +619,14 @@ public class Osm2map extends JavaPlugin implements Listener {
 
     public Object getSatelliteBlock(String worldName, Vector2i xz, Interface inter) {
         World world = worlds.getWorld(worldName);
-        if (blocksByInterfaceBlockType.get(inter.getBlockClass()) == null) {
-            blocksByInterfaceBlockType.put(inter.getBlockClass(), Util.getBlocksColors(world.config.tile.blockColorsFile, inter));
-        }
+        Map<Vector3i, Object> palette = blocksByWorld.get(worldName).computeIfAbsent(inter.getBlockClass(),
+                type -> Util.getBlocksColors(world.config.tile.blockColorsFile, inter));
         Color color = world.tiles.getColor(xz.add(new Vector2i(world.config.tile.offsetX, world.config.tile.offsetY)), true);
+        if (color == null) return Util.getConfigBlock(inter, world.config.blocks.groundTopBlock);
         Vector3i colorVector = new Vector3i(color.getRed(), color.getGreen(), color.getBlue());
         double distance = Double.MAX_VALUE;
         Object best = null;
-        for (Map.Entry<Vector3i, Object> e : blocksByInterfaceBlockType.get(inter.getBlockClass()).entrySet()) {
+        for (Map.Entry<Vector3i, Object> e : palette.entrySet()) {
             if (e.getKey().distance(colorVector) < distance) {
                 distance = e.getKey().distance(colorVector);
                 best = e.getValue();

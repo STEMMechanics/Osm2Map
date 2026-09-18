@@ -7,11 +7,15 @@
 
 # Installation
 
-## Requirements (FAWE)
-Install Fast Async WorldEdit :
-[https://intellectualsites.github.io/download/fawe.html](https://intellectualsites.github.io/download/fawe.html)
+## Requirements
 
-Run the server once for Fawe to install correctly
+- Java 25
+- Paper 26.2
+- [FastAsyncWorldEdit](https://modrinth.com/plugin/fastasyncworldedit) 2.15.3 or newer,
+  using its Bukkit/Paper build marked compatible with Minecraft 26.2
+
+FAWE supplies WorldEdit; do not also install the old WorldEdit 6 jar.
+See [compatibility and validation](COMPATIBILITY.md).
 
 ## Requirements (OpenStreetMap)
 You need to download the map you want with the `format OSM XML`
@@ -20,10 +24,13 @@ You need to download the map you want with the `format OSM XML`
 
 ## Osm2Map
 
-- Download and put `osm2map.jar` in `plugins/` folder
-- Execute `osm2map.jar` or `java -jar osm2map.jar` to generate the default config 
+- Build with `bash gradlew clean build` and copy `build/libs/osm2map-4.0.0-all.jar` into `plugins/`.
+- From the server directory, run `java -jar plugins/osm2map-4.0.0-all.jar` to generate the default config. Existing config files are left intact.
+
 - Edit the config file [(CONFIG.md)](CONFIG.md) in `plugins/osm2map/config/config.json`
-- Put `Github : assets/groundBlocks.txt` in `plugins/osm2map/groundBlocks.txt`
+- When satellite coloring is enabled, the bundled `groundBlocks.txt` is copied to the configured palette path if missing. Existing palettes are validated and preserved.
+- Supply the configured OSM XML file. Empty databases are initialized and imported automatically. Set `forceInit` to `true` only to rebuild an existing map database, including claims and POIs; use a fresh database path when testing.
+- Configure the generator below before starting Paper.
 > :warning: **If you change the .osm**: Delete the world and set **forceInit** to **true** in the world's config to force reload the .osm file
 
 #### Configure Bukkit

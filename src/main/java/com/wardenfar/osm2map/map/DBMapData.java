@@ -2,10 +2,10 @@ package com.wardenfar.osm2map.map;
 
 import com.flowpowered.math.vector.Vector3d;
 import com.flowpowered.math.vector.Vector3i;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.CoordinateFilter;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Point;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.CoordinateFilter;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.Point;
 import com.wardenfar.osm2map.Osm2map;
 import com.wardenfar.osm2map.Util;
 import com.wardenfar.osm2map.db.Database;
@@ -290,7 +290,7 @@ public class DBMapData {
                 }
                 if (osmRelation.getNumberOfMembers() > 0 && tags.get("type") != null && tags.get("type").equals("multipolygon")) {
                     try {
-                        Geometry g = builder.build(osmRelation, osmData);
+                        Geometry g = Util.fromViWkt(builder.build(osmRelation, osmData).toText());
                         mapData.projectGeometryInversed(g);
                         JtsZone zone = new JtsZone(-1, type, null, null, g);
                         zones.add(zone);
@@ -313,7 +313,7 @@ public class DBMapData {
             way.createLineString(mapData);
             db.insertWay(way);
             if (count % 1000 == 0) {
-                System.out.println("Ways : " + count + "/" + ways.size());
+                logger.info("Ways : " + count + "/" + ways.size());
             }
             count++;
         }

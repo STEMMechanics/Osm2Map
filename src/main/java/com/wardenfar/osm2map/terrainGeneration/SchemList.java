@@ -1,6 +1,11 @@
 package com.wardenfar.osm2map.terrainGeneration;
 
-import com.boydti.fawe.FaweAPI;
+import com.sk89q.worldedit.extent.clipboard.Clipboard;
+import com.sk89q.worldedit.extent.clipboard.io.ClipboardFormat;
+import com.sk89q.worldedit.extent.clipboard.io.ClipboardFormats;
+import com.sk89q.worldedit.extent.clipboard.io.ClipboardReader;
+import java.io.FileInputStream;
+import java.io.IOException;
 import com.wardenfar.osm2map.Util;
 
 import java.io.File;
@@ -22,7 +27,7 @@ public class SchemList {
                 System.out.println("Load Tree Schematic : " + file.getPath());
 
                 try {
-                    SuperSchematic schem = new SuperSchematic(FaweAPI.load(file));
+                    SuperSchematic schem = new SuperSchematic(loadClipboard(file));
                     addSchem(schem);
                     if (rotated) {
                         for (int i = 1; i <= 3; i++) {
@@ -42,7 +47,7 @@ public class SchemList {
             for (File file : folder.listFiles()) {
                 System.out.println("Load Car Schematic : " + file.getPath());
                 try {
-                    SuperSchematic schem = new SuperSchematic(FaweAPI.load(file));
+                    SuperSchematic schem = new SuperSchematic(loadClipboard(file));
                     String[] filename = Util.getFileNameWithoutExtension(file).split("-r=");
                     if (filename.length == 2) {
                         int rotation = Integer.parseInt(filename[1]);
@@ -60,9 +65,18 @@ public class SchemList {
         }
     }
 
+    private static Clipboard loadClipboard(File file) throws IOException {
+        ClipboardFormat format = ClipboardFormats.findByFile(file);
+        if (format == null) throw new IOException("Unsupported schematic format: " + file);
+        try (FileInputStream input = new FileInputStream(file);
+             ClipboardReader reader = format.getReader(input)) {
+            return reader.read();
+        }
+    }
+
     public void addSchem(SuperSchematic schem) {
         this.schems.add(schem);
-        maxSize = Math.max(maxSize, Math.max(schem.getWidth(), schem.getHeight()));
+        maxSize = Math.max(maxSize, Math.max(schem.getWidth(), schem.getLength()));
     }
 
     public int getBuffer() {

@@ -1,9 +1,9 @@
 package com.wardenfar.osm2map.db;
 
 import com.flowpowered.math.vector.Vector3d;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.Polygon;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.Polygon;
 import com.wardenfar.osm2map.Util;
 import com.wardenfar.osm2map.map.entity.*;
 
@@ -30,7 +30,15 @@ public class Database {
             conn = DriverManager.getConnection(getUrl(false));
             statement = conn.createStatement();
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IllegalStateException("Cannot open database " + file, e);
+        }
+    }
+
+    public boolean isEmpty() {
+        try (ResultSet tables = conn.getMetaData().getTables(null, "PUBLIC", "%", new String[]{"TABLE"})) {
+            return !tables.next();
+        } catch (SQLException e) {
+            throw new IllegalStateException("Cannot inspect database " + file, e);
         }
     }
 
@@ -55,8 +63,7 @@ public class Database {
     }
 
     public OptionsRecord getOptions() {
-        try {
-            ResultSet rs = statement.executeQuery("SELECT * FROM options WHERE id = 1");
+        try (ResultSet rs = statement.executeQuery("SELECT * FROM options WHERE id = 1")) {
             if (rs.next()) {
                 return new OptionsRecord(
                         rs.getInt("height"),
@@ -69,8 +76,7 @@ public class Database {
                 throw new IllegalStateException("No options row");
             }
         } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
+            throw new IllegalStateException("Cannot read map options from " + file + "; database is not initialized or is incompatible", e);
         }
     }
 
@@ -178,40 +184,37 @@ public class Database {
     }
 
     public void prepareBigImport() {
-        executeSql("SET LOG 0");
         executeSql("SET LOCK_MODE 0");
-        executeSql("SET UNDO_LOG 0");
         executeSql("SET CACHE_SIZE 65536");
     }
 
     public void resetBigImport() {
-        executeSql("SET LOG 1");
         executeSql("SET LOCK_MODE 1");
-        executeSql("SET UNDO_LOG 1");
     }
 
     public static Database create(File file, boolean init) {
         Database db = new Database(file);
         db.init();
         if (init) {
-            try {
-                db.statement.execute("DROP ALL OBJECTS");
-                BufferedReader br = new BufferedReader(new InputStreamReader(Objects.requireNonNull(db.getClass().getClassLoader().getResourceAsStream("schema.sql"))));
-                StringBuilder sqlBuilder = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) {
-                    sqlBuilder.append(line).append("\n");
-                }
-                br.close();
-                String sql = sqlBuilder.toString().trim();
-                //System.out.println(sql);
-                System.out.println("Create Schema ...");
-                db.statement.execute(sql);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            db.initializeSchema();
         }
         return db;
+    }
+
+    public void initializeSchema() {
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                Objects.requireNonNull(getClass().getClassLoader().getResourceAsStream("schema.sql"))))) {
+            StringBuilder sql = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sql.append(line).append('\n');
+            }
+            statement.execute("DROP ALL OBJECTS");
+            statement.execute(sql.toString());
+        } catch (Exception e) {
+            close();
+            throw new IllegalStateException("Cannot initialize database " + file, e);
+        }
     }
 
     public void insertZones(List<JtsZone> zones) {
@@ -239,6 +242,7 @@ public class Database {
                 ResultSet rs = stat.getGeneratedKeys();
                 if (rs.next()) {
                     long id = rs.getLong(1);
+                    z.id = id;
                     for (String friend : z.friends) {
                         addFriend(id, friend);
                     }
@@ -439,28 +443,21 @@ public class Database {
     }
 
     public Poi getPoi(long id) {
-        try {
-            PreparedStatement ps = conn.prepareStatement("SELECT * FROM poi JOIN VECTOR3D ON (poi.position = vector3d.id OR poi.rotation = vector3d.id) WHERE poi.id = ?");
+        String sql = "SELECT p.id, p.name, pos.x AS px, pos.y AS py, pos.z AS pz, "
+                + "rot.x AS rx, rot.y AS ry, rot.z AS rz, p.rotation "
+                + "FROM poi p JOIN vector3d pos ON p.position = pos.id "
+                + "LEFT JOIN vector3d rot ON p.rotation = rot.id WHERE p.id = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
-
-            ResultSet rs = ps.executeQuery();
-            long rId = -1;
-            String name = null;
-            Vector3d pos = null, rot = null;
-            while (rs.next()) {
-                rId = rs.getLong("poi.id");
-                name = rs.getString("poi.name");
-                Vector3d v = new Vector3d(rs.getDouble("vector3d.x"), rs.getDouble("vector3d.y"), rs.getDouble("vector3d.z"));
-                if (rs.getLong("vector3d.id") == rs.getLong("poi.position")) {
-                    pos = v;
-                } else if (hasColumn(rs, "poi.rotation") && rs.getLong("vector3d.id") == rs.getLong("poi.rotation")) {
-                    rot = v;
-                }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) return null;
+                Vector3d pos = new Vector3d(rs.getDouble("px"), rs.getDouble("py"), rs.getDouble("pz"));
+                Vector3d rot = rs.getObject("rotation") == null ? null
+                        : new Vector3d(rs.getDouble("rx"), rs.getDouble("ry"), rs.getDouble("rz"));
+                return new Poi(rs.getLong("id"), rs.getString("name"), pos, rot);
             }
-            return new Poi(rId, name, pos, rot);
         } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
+            throw new IllegalStateException("Could not read POI " + id, e);
         }
     }
 

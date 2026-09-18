@@ -3,8 +3,8 @@ package com.wardenfar.osm2map.command;
 import com.sk89q.intake.Command;
 import com.sk89q.intake.Require;
 import com.sk89q.intake.parametric.annotation.Optional;
-import com.sk89q.worldedit.BlockVector2D;
-import com.sk89q.worldedit.Vector;
+import com.sk89q.worldedit.math.BlockVector2;
+import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.regions.Polygonal2DRegion;
@@ -51,25 +51,26 @@ public class ZoneCommands extends Commands {
         DBMapData data = plugin.getMapData(src.getWorld().getName());
         try {
             WorldEdit worldEdit = WorldEdit.getInstance();
-            Region region = worldEdit.getSessionManager().findByName(src.getName()).getSelection(worldEdit.getServer().getWorlds().get(0));
+            Region region = worldEdit.getSessionManager().get(com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(src)).getSelection(com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(src.getWorld()));
             List<Vector2i> points = new ArrayList<>();
             if (region instanceof CuboidRegion) {
                 sendMessage(src, "CuboidRegion", ChatColor.LIGHT_PURPLE);
                 CuboidRegion r = (CuboidRegion) region;
-                Vector min = r.getMinimumPoint();
-                Vector max = r.getMaximumPoint();
-                points.add(new Vector2i(min.getBlockX(), min.getBlockZ()));
-                points.add(new Vector2i(min.getBlockX(), max.getBlockZ()));
-                points.add(new Vector2i(max.getBlockX(), max.getBlockZ()));
-                points.add(new Vector2i(max.getBlockX(), min.getBlockZ()));
+                BlockVector3 min = r.getMinimumPoint();
+                BlockVector3 max = r.getMaximumPoint();
+                points.add(new Vector2i(min.x(), min.z()));
+                points.add(new Vector2i(min.x(), max.z()));
+                points.add(new Vector2i(max.x(), max.z()));
+                points.add(new Vector2i(max.x(), min.z()));
             } else if (region instanceof Polygonal2DRegion) {
                 sendMessage(src, "PolygonalRegion", ChatColor.LIGHT_PURPLE);
                 Polygonal2DRegion r = (Polygonal2DRegion) region;
-                for (BlockVector2D p : r.getPoints()) {
-                    points.add(new Vector2i(p.getBlockX(), p.getBlockZ()));
+                for (BlockVector2 p : r.getPoints()) {
+                    points.add(new Vector2i(p.x(), p.z()));
                 }
             } else {
                 sendMessage(src, "Unsupported Region Type", ChatColor.RED);
+                return;
             }
 
             plugin.getRequestManager().postRequest(src, new ZoneCreateRequest(src.getWorld().getName(), type, doGen, points));

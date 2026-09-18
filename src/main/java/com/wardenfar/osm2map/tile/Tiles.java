@@ -42,6 +42,8 @@ public class Tiles {
 
         BufferedImage image = getTile(pos, processed);
 
+        if (image == null) return null;
+
         Vector2d topleftLatLon = Util.getLatLonFromTile(pos.x, pos.y, zoom);
         Vector2d bottomRightLatLon = Util.getLatLonFromTile(pos.x + 1, pos.y + 1, zoom);
         Vector2d topLeft = mapData.project(new LatLon(topleftLatLon.x, topleftLatLon.y));

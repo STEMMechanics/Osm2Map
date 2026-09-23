@@ -154,6 +154,18 @@ public class Util {
         return readOrCreateWorldsJson(configFile);
     }
 
+    public static void writeWorldsJson(String configFile, Worlds worlds) throws IOException {
+        Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        File file = new File(configFile);
+        File parent = file.getAbsoluteFile().getParentFile();
+        if (!parent.isDirectory() && !parent.mkdirs()) {
+            throw new IOException("Cannot create configuration directory: " + parent);
+        }
+        try (FileWriter writer = new FileWriter(file)) {
+            gson.toJson(worlds, writer);
+        }
+    }
+
     public static Worlds readOrCreateWorldsJson(String configFile) throws Exception {
         Worlds worlds;
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -197,9 +209,7 @@ public class Util {
                 throw new IOException("Cannot create configuration directory: " + parent);
             }
         }
-        try (FileWriter writer = new FileWriter(file)) {
-            gson.toJson(worlds, writer);
-        }
+        writeWorldsJson(configFile, worlds);
         return worlds;
     }
 

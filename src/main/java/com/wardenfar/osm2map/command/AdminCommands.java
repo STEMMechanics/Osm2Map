@@ -41,4 +41,24 @@ public class AdminCommands extends Commands {
         Vector2i tile = Util.getTile(latLon.lat, latLon.lon, plugin.getConfig(player.getWorld().getName()).tile.tilesZoom);
         sendMessage(player, latLon.lat + " , " + latLon.lon + "  tile:" + tile.x + "," + tile.y);
     }
+
+    @Command(
+            aliases = {"guard"},
+            desc = "Show or set guard mode",
+            usage = "[true|false]"
+    )
+    @Require("osm2map.admin.guard")
+    public void adminGuard(@Sender Player player, @Optional Boolean active) {
+        String worldName = player.getWorld().getName();
+        if (active == null) {
+            sendMessage(player, "Guard mode is " + plugin.getConfig(worldName).guard.active + ".");
+            return;
+        }
+        try {
+            plugin.setGuardActive(worldName, active);
+            sendMessage(player, "Guard mode set to " + active + " for " + worldName + ".");
+        } catch (Exception e) {
+            sendMessage(player, "Could not save guard mode: " + e.getMessage(), ChatColor.RED);
+        }
+    }
 }

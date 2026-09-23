@@ -50,6 +50,7 @@
 | /o2m admin claim public | Claim the current zone in Public Mode | _`osm2map.admin.claim.public`_ |
 | /o2m admin unclaim as | Unclaim the current zone | _`osm2map.admin.unclaim.as`_ |
 | /o2m admin unclaim allof (Player) | Unclaim all zone of a Player | _`osm2map.admin.unclaim.allof`_ |
+| /o2m admin guard [true\|false] | Show or set guard mode for the current world | _`osm2map.admin.guard`_ |
 
 ## Modo Commands (Modos don't have zone restriction)
 

@@ -10,9 +10,9 @@
 ## Requirements
 
 - Java 25
-- Paper 26.2
-- [FastAsyncWorldEdit](https://modrinth.com/plugin/fastasyncworldedit) 2.15.3 or newer,
-  using its Bukkit/Paper build marked compatible with Minecraft 26.2
+- Paper 26.3
+- [FastAsyncWorldEdit](https://modrinth.com/plugin/fastasyncworldedit) 2.16.1 or newer,
+  using its Paper build marked compatible with Minecraft 26.3
 
 FAWE supplies WorldEdit; do not also install the old WorldEdit 6 jar.
 See [compatibility and validation](COMPATIBILITY.md).
@@ -24,7 +24,8 @@ You need to download the map you want with the `format OSM XML`
 
 ## Osm2Map
 
-- Build with `bash gradlew clean build` and copy `build/libs/osm2map-4.0.0-all.jar` into `plugins/`.
+- Download the `osm2map-<version>-all.jar` asset from [GitHub releases](https://github.com/STEMMechanics/Osm2Map/releases), for example `osm2map-4.0.0-build.4-all.jar`. Copy it into `plugins/` and use that filename in the standalone config command below.
+- Alternatively, build with `bash gradlew clean build` and copy `build/libs/osm2map-4.0.0-all.jar` into `plugins/`.
 - From the server directory, run `java -jar plugins/osm2map-4.0.0-all.jar` to generate the default config. Existing config files are left intact.
 
 - Edit the config file [(CONFIG.md)](CONFIG.md) in `plugins/osm2map/config/config.json`

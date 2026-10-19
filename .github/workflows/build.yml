@@ -1,29 +1,77 @@
-name: Build OSM2Map
+name: Build and Release Osm2Map
 
 on:
   push:
+    branches: [master]
+  pull_request:
+    branches: [master]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: "Build OSM2Map"
+    name: Build Osm2Map
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      jar: ${{ steps.metadata.outputs.jar }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.6
+        uses: actions/checkout@v7
         with:
           submodules: recursive
+          persist-credentials: false
 
       - name: Setup Java SDK
-        uses: actions/setup-java@v4.2.1
+        uses: actions/setup-java@v6
         with:
-          java-version: 21
-          distribution: "microsoft"
-          cache: "gradle"
+          java-version: '25'
+          distribution: microsoft
+          cache: gradle
 
-      - name: Grant Write Permissions to gradlew script
-        run: chmod 700 ./gradlew
+      - name: Check release script
+        run: python3 .github/scripts/test_release.py
 
-      - name: Build
-        run: ./gradlew build
+      - name: Build and verify
+        run: bash gradlew --no-daemon clean build writeReleaseMetadata -PbuildNumber="$GITHUB_RUN_NUMBER"
+
+      - name: Read release metadata
+        id: metadata
+        run: cat build/release.properties >> "$GITHUB_OUTPUT"
+
+      - name: Upload plugin JAR
+        uses: actions/upload-artifact@v7
+        with:
+          name: osm2map-${{ github.run_number }}
+          path: build/libs/${{ steps.metadata.outputs.jar }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release script
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Download verified plugin JAR
+        uses: actions/download-artifact@v8
+        with:
+          name: osm2map-${{ github.run_number }}
+          path: build/libs
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ needs.build.outputs.version }}
+          RELEASE_JAR: ${{ needs.build.outputs.jar }}
+        run: bash .github/scripts/release.sh "$RELEASE_VERSION" "build/libs/$RELEASE_JAR"

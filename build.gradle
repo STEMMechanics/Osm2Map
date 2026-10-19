@@ -8,6 +8,14 @@ application { mainClass = 'com.wardenfar.osm2map.Main' }
 group = 'com.wardenfar.spigot'
 version = '4.0.0'
 
+def buildNumber = providers.gradleProperty('buildNumber').orNull
+if (buildNumber != null) {
+    if (!(buildNumber ==~ /[1-9][0-9]*/)) {
+        throw new GradleException('buildNumber must be a positive integer')
+    }
+    version = "${version}-build.${buildNumber}"
+}
+
 compileJava.options.encoding = 'UTF-8'
 
 java { toolchain.languageVersion = JavaLanguageVersion.of(25) }
@@ -44,7 +52,7 @@ dependencies {
     testImplementation "org.ow2.asm:asm:9.9.1"
     testImplementation group: 'junit', name: 'junit', version: '4.13.2'
 
-    compileOnly "io.papermc.paper:paper-api:26.2.build.121-stable"
+    compileOnly "io.papermc.paper:paper-api:26.3.build.195-stable"
 
     implementation group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
 
@@ -63,8 +71,8 @@ dependencies {
 
     implementation group: 'com.h2database', name: 'h2', version: '2.2.220'
 
-    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Core:2.15.3")
-    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Bukkit:2.15.3")
+    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Core:2.16.1")
+    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Bukkit:2.16.1")
     implementation "com.google.code.gson:gson:2.11.0"
 
 }
@@ -98,6 +106,7 @@ tasks.register('verifyPluginJar') {
             assert descriptors.size() == 1 : 'Expected exactly one plugin descriptor'
             def descriptor = jar.getInputStream(descriptors.first()).getText('UTF-8')
             assert descriptor.contains('main: "com.wardenfar.osm2map.Osm2map"')
+            // Keep the minimum API version while validating against Paper 26.3.
             assert descriptor.contains('api-version: "26.2"')
             assert descriptor.contains('version: "' + expectedVersion + '"')
             assert !entries.any { entry ->
@@ -124,3 +133,15 @@ tasks.register('verifyStandaloneConfig', JavaExec) {
     }
 }
 check.dependsOn verifyStandaloneConfig
+
+tasks.register('writeReleaseMetadata') {
+    dependsOn shadowJar
+    def releaseVersion = project.version.toString()
+    def releaseJar = shadowJar.archiveFile
+    inputs.property 'version', releaseVersion
+    inputs.file releaseJar
+    outputs.file layout.buildDirectory.file('release.properties')
+    doLast {
+        outputs.files.singleFile.text = "version=${releaseVersion}\njar=${releaseJar.get().asFile.name}\n"
+    }
+}

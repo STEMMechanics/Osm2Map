@@ -1,10 +1,10 @@
 package com.wardenfar.osm2map.terrainGeneration;
 
 import com.flowpowered.math.vector.Vector3i;
-import com.sk89q.worldedit.CuboidClipboard;
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.vividsolutions.jts.geom.Point;
+import com.wardenfar.osm2map.terrainGeneration.GenerationClipboard;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.world.block.BaseBlock;
+import org.locationtech.jts.geom.Point;
 import com.wardenfar.osm2map.Osm2map;
 import com.wardenfar.osm2map.Util;
 import com.wardenfar.osm2map.config.BlocksConfig;
@@ -12,10 +12,11 @@ import com.wardenfar.osm2map.config.Config;
 import com.wardenfar.osm2map.map.DBMapData;
 import com.wardenfar.osm2map.map.entity.*;
 import com.wardenfar.osm2map.pluginInterface.Interface;
-import org.bukkit.World;
+import org.bukkit.generator.WorldInfo;
+import org.bukkit.generator.BiomeProvider;
 import org.bukkit.block.Biome;
 import org.bukkit.generator.ChunkGenerator;
-import org.bukkit.material.MaterialData;
+import org.bukkit.block.data.BlockData;
 
 import java.awt.Rectangle;
 import java.io.File;
@@ -56,40 +57,44 @@ public class OsmElevGenerator extends ChunkGenerator {
 
 
     @Override
-    public ChunkData generateChunkData(World worldBukkit, Random random, int chunkX, int chunkZ, BiomeGrid biome) {
-        for (int x = 0; x < 16; x++) {
-            for (int z = 0; z < 16; z++) {
-                biome.setBiome(x, z, Biome.JUNGLE);
-            }
-        }
-
-        com.wardenfar.osm2map.config.World world = plugin.getWorlds().getWorld(worldBukkit.getName());
-
-        if (world == null) {
-            return null;
-        } else if (!world.init) {
-            init(world);
-        }
-
-        ChunkData chunkData = createChunkData(worldBukkit);
-
-        Vector2i min = new Vector2i(chunkX * 16, chunkZ * 16);
-        Vector2i max = min.copy().add(15);
-
-        SuperChunkData superChunkData = new SuperChunkData(chunkData, min.copy().multiply(-1));
-        interfaceByBuffer.put(superChunkData, plugin.getInterface());
-
-        populate(world, superChunkData, min, max);
-        return chunkData;
+    public BiomeProvider getDefaultBiomeProvider(WorldInfo worldInfo) {
+        return new BiomeProvider() {
+            @Override
+            public Biome getBiome(WorldInfo world, int x, int y, int z) { return Biome.JUNGLE; }
+            @Override
+            public List<Biome> getBiomes(WorldInfo world) { return List.of(Biome.JUNGLE); }
+        };
     }
 
-    public Integer populate(String worldName, CuboidClipboard schem, Interface inter) {
+    @Override
+    public synchronized void generateNoise(WorldInfo worldInfo, Random random, int chunkX, int chunkZ, ChunkData chunkData) {
+        com.wardenfar.osm2map.config.World world = plugin.getWorlds().getWorld(worldInfo.getName());
+        if (world == null) return;
+        if (!world.init) init(world);
+        Vector2i min = new Vector2i(chunkX * 16, chunkZ * 16);
+        Vector2i max = min.copy().add(15);
+        SuperChunkData buffer = new SuperChunkData(chunkData, min.copy().multiply(-1));
+        interfaceByBuffer.put(buffer, plugin.getInterface());
+        try {
+            populate(world, buffer, min, max);
+        } finally {
+            interfaceByBuffer.remove(buffer);
+            maxYByBuffer.remove(buffer);
+        }
+    }
+
+    public synchronized Integer populate(String worldName, GenerationClipboard schem, Interface inter) {
         com.wardenfar.osm2map.config.World world = plugin.getWorlds().getWorld(worldName);
         interfaceByBuffer.put(schem, inter);
-        Vector2i min = new Vector2i(schem.getOrigin().getBlockX(), schem.getOrigin().getBlockZ());
-        Vector2i max = new Vector2i(min.x + schem.getWidth(), min.y + schem.getLength());
-        populate(world, schem, min, max);
-        return maxYByBuffer.get(schem);
+        Vector2i min = new Vector2i(schem.getOrigin().x(), schem.getOrigin().z());
+        Vector2i max = new Vector2i(min.x + schem.getWidth() - 1, min.y + schem.getLength() - 1);
+        try {
+            populate(world, schem, min, max);
+            return maxYByBuffer.get(schem);
+        } finally {
+            interfaceByBuffer.remove(schem);
+            maxYByBuffer.remove(schem);
+        }
     }
 
     public void populate(com.wardenfar.osm2map.config.World world, Object buffer, Vector2i min, Vector2i max) {
@@ -116,7 +121,7 @@ public class OsmElevGenerator extends ChunkGenerator {
         Vector2d mapBR = mapData.project(mapData.getBottomRight());
 
         Rectangle mapDataRect = new Rectangle(mapTL.getX(), mapTL.getY(), mapBR.getX() - mapTL.getX(), mapBR.getY() - mapTL.getY());
-        if (!mapDataRect.contains(min.x, min.y) && !mapDataRect.contains(min.x, max.y) && !mapDataRect.contains(max.x, min.y) && !mapDataRect.contains(max.x, max.y)) {
+        if (!mapDataRect.intersects(min.x, min.y, max.x - min.x + 1, max.y - min.y + 1)) {
             return;
         }
 
@@ -183,7 +188,8 @@ public class OsmElevGenerator extends ChunkGenerator {
                     }
                 }/* else if (me.type.equals("fountain") && !fountains.schems.isEmpty()) {
                 Point centroid = me.geometry.getCentroid();
-                Vector3i center = new Vector3i(centroid.getX(), plugin.getElevByBlockXZ(world.name, (int) centroid.getX(), (int) centroid.getY()) + 1, (int) centroid.getY());
+                if (trees.schems.isEmpty()) return;
+        Vector3i center = new Vector3i(centroid.getX(), plugin.getElevByBlockXZ(world.name, (int) centroid.getX(), (int) centroid.getY()) + 1, (int) centroid.getY());
                 SuperSchematic fountain = fountains.schems.get(0);
                 Vector3i origin = center.sub(fountain.getWidth() / 2, 0, fountain.getLength() / 2);
                 pasteSchem(buffer, fountain, origin);
@@ -229,7 +235,8 @@ public class OsmElevGenerator extends ChunkGenerator {
                         Coordinate midPoint = segment.midPoint();
                         Random random = new Random(Objects.hash(config.generation.seed, midPoint.x, midPoint.y));
                         random.nextLong();
-                        Vector3i center = new Vector3i(midPoint.x, plugin.getElevByBlockXZ(world.name, (int) midPoint.x, (int) midPoint.y) + 1, (int) midPoint.y);
+                        if (trees.schems.isEmpty()) return;
+        Vector3i center = new Vector3i(midPoint.x, plugin.getElevByBlockXZ(world.name, (int) midPoint.x, (int) midPoint.y) + 1, (int) midPoint.y);
                         float rf = random.nextFloat();
                         int index = Math.round(rf * (cars.schems.size() - 1));
                         SuperSchematic car = cars.schems.get(index).rotate(roundAngle);
@@ -312,6 +319,7 @@ public class OsmElevGenerator extends ChunkGenerator {
     }
 
     private void pasteTree(com.wardenfar.osm2map.config.World world, Object buffer, long seed, int x, int y) {
+        if (trees.schems.isEmpty()) return;
         Vector3i center = new Vector3i(x, plugin.getElevByBlockXZ(world.name, x, y) + 1, y);
         Random random = new Random(Objects.hash(seed, x, y));
         random.nextLong();
@@ -326,9 +334,9 @@ public class OsmElevGenerator extends ChunkGenerator {
         for (int x = 0; x < schem.getWidth(); x++) {
             for (int z = 0; z < schem.getLength(); z++) {
                 for (int y = 0; y < schem.getHeight(); y++) {
-                    BaseBlock block = schem.getBlock(new Vector(x, y, z));
+                    BaseBlock block = schem.getBlock(BlockVector3.at(x, y, z));
                     if (block != null) {
-                        Object blockObject = interfaceByBuffer.get(buffer).getBlock(block.getId(), block.getData());
+                        Object blockObject = interfaceByBuffer.get(buffer).fromBlock(block);
                         setBlockReplaceAir(buffer, offset.getX() + x, offset.getY() + y, offset.getZ() + z, blockObject);
                     }
                 }
@@ -338,9 +346,9 @@ public class OsmElevGenerator extends ChunkGenerator {
 
     private void fillBelow(Object buffer, int height, List<Vector2i> pixels, Object block) {
         for (Vector2i p : pixels) {
-            for (int i = height - 1; i >= 0; i--) {
-                Integer id = interfaceByBuffer.get(buffer).getBlockId(getBlock(buffer, p.x, i, p.y));
-                if (id != null && id.equals(0)) { // 0 = air
+            for (int i = height - 1; i >= getMinHeight(buffer); i--) {
+                Object current = getBlock(buffer, p.x, i, p.y);
+                if (current != null && interfaceByBuffer.get(buffer).isAir(current)) { // 0 = air
                     setBlock(buffer, p.x, i, p.y, block);
                 } else {
                     break;
@@ -351,9 +359,9 @@ public class OsmElevGenerator extends ChunkGenerator {
 
     private void cleanAbove(Object buffer, int height, List<Vector2i> pixels, Object cleanBlock) {
         for (Vector2i p : pixels) {
-            for (int i = height + 1; i < 256; i++) {
-                Integer id = interfaceByBuffer.get(buffer).getBlockId(getBlock(buffer, p.x, i, p.y));
-                if (id != null && !id.equals(0)) { // 0 = air
+            for (int i = height + 1; i < getMaxHeight(buffer); i++) {
+                Object current = getBlock(buffer, p.x, i, p.y);
+                if (current != null && !interfaceByBuffer.get(buffer).isAir(current)) { // 0 = air
                     setBlock(buffer, p.x, i, p.y, cleanBlock);
                 } else {
                     break;
@@ -392,7 +400,7 @@ public class OsmElevGenerator extends ChunkGenerator {
         if (y != -1) {
             Vector3i pos = new Vector3i(x, y + offset, z);
             Object currentBlock = getBlock(buffer, pos.getX(), pos.getY(), pos.getZ());
-            if (currentBlock != null && !interfaceByBuffer.get(buffer).getBlockId(currentBlock).equals(0)) {
+            if (currentBlock != null && !interfaceByBuffer.get(buffer).isAir(currentBlock)) {
                 return;
             }
             setBlock(buffer, pos.getX(), pos.getY(), pos.getZ(), block);
@@ -407,21 +415,32 @@ public class OsmElevGenerator extends ChunkGenerator {
         }
     }
 
+    private int getMinHeight(Object buffer) {
+        return buffer instanceof SuperChunkData chunk ? chunk.data.getMinHeight()
+                : ((GenerationClipboard) buffer).getOrigin().y();
+    }
+
+    private int getMaxHeight(Object buffer) {
+        return buffer instanceof SuperChunkData chunk ? chunk.data.getMaxHeight()
+                : ((GenerationClipboard) buffer).getOrigin().y() + ((GenerationClipboard) buffer).getHeight();
+    }
+
     private Object getBlock(Object o, int x, int y, int z) {
         if (o instanceof SuperChunkData) {
             SuperChunkData buffer = (SuperChunkData) o;
             x += buffer.offset.x;
             z += buffer.offset.y;
-            if (0 <= x && 0 <= z && 0 <= y && x <= 15 && z <= 15 && y <= 255) {
-                return buffer.data.getTypeAndData(x, y, z);
+            if (0 <= x && 0 <= z && buffer.data.getMinHeight() <= y && x <= 15 && z <= 15 && y < buffer.data.getMaxHeight()) {
+                return buffer.data.getBlockData(x, y, z);
             }
         }
-        if (o instanceof CuboidClipboard) {
-            CuboidClipboard buffer = (CuboidClipboard) o;
-            x -= buffer.getOrigin().getBlockX();
-            z -= buffer.getOrigin().getBlockZ();
+        if (o instanceof GenerationClipboard) {
+            GenerationClipboard buffer = (GenerationClipboard) o;
+            x -= buffer.getOrigin().x();
+            z -= buffer.getOrigin().z();
+            y -= buffer.getOrigin().y();
             if (0 <= x && 0 <= z && 0 <= y && x < buffer.getWidth() && z < buffer.getLength() && y < buffer.getHeight()) {
-                return buffer.getBlock(new Vector(x, y, z));
+                return buffer.getBlock(BlockVector3.at(x, y, z));
             }
         }
         return null;
@@ -430,36 +449,38 @@ public class OsmElevGenerator extends ChunkGenerator {
 
     private void setBlockReplaceAir(Object buffer, int x, int y, int z, Object block) {
         Object currentBlock = getBlock(buffer, x, y, z);
-        if (currentBlock != null && !interfaceByBuffer.get(buffer).getBlockId(currentBlock).equals(0)) {
+        if (currentBlock != null && !interfaceByBuffer.get(buffer).isAir(currentBlock)) {
             return;
         }
         setBlock(buffer, x, y, z, block);
     }
 
     private void setBlock(Object o, int x, int y, int z, Object block) {
+        int worldY = y;
         boolean placed = false;
         if (o instanceof SuperChunkData) {
             SuperChunkData buffer = (SuperChunkData) o;
             x += buffer.offset.x;
             z += buffer.offset.y;
-            if (0 <= x && 0 <= z && 0 <= y && x <= 15 && z <= 15 && y <= 255) {
-                buffer.data.setBlock(x, y, z, (MaterialData) block);
+            if (0 <= x && 0 <= z && buffer.data.getMinHeight() <= y && x <= 15 && z <= 15 && y < buffer.data.getMaxHeight()) {
+                buffer.data.setBlock(x, y, z, (BlockData) block);
                 placed = true;
             }
         }
-        if (o instanceof CuboidClipboard) {
-            CuboidClipboard buffer = (CuboidClipboard) o;
-            x -= buffer.getOrigin().getBlockX();
-            z -= buffer.getOrigin().getBlockZ();
+        if (o instanceof GenerationClipboard) {
+            GenerationClipboard buffer = (GenerationClipboard) o;
+            x -= buffer.getOrigin().x();
+            z -= buffer.getOrigin().z();
+            y -= buffer.getOrigin().y();
             if (0 <= x && 0 <= z && 0 <= y && x < buffer.getWidth() && z < buffer.getLength() && y < buffer.getHeight()) {
-                buffer.setBlock(new Vector(x, y, z), (BaseBlock) block);
+                buffer.setBlock(BlockVector3.at(x, y, z), (BaseBlock) block);
                 placed = true;
             }
         }
         if (placed) {
             int currentMaxY = maxYByBuffer.getOrDefault(o, -1);
-            if (y > currentMaxY) {
-                maxYByBuffer.put(o, y);
+            if (worldY > currentMaxY) {
+                maxYByBuffer.put(o, worldY);
             }
         }
     }

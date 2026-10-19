@@ -1,98 +1,49 @@
 package com.wardenfar.osm2map.terrainGeneration;
 
-import com.boydti.fawe.object.schematic.Schematic;
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.Vector2D;
-import com.sk89q.worldedit.WorldEditException;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.sk89q.worldedit.blocks.BlockData;
 import com.sk89q.worldedit.extent.clipboard.BlockArrayClipboard;
 import com.sk89q.worldedit.extent.clipboard.Clipboard;
+import com.sk89q.worldedit.extent.transform.BlockTransformExtent;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.math.transform.AffineTransform;
 import com.sk89q.worldedit.regions.CuboidRegion;
+import com.sk89q.worldedit.world.block.BaseBlock;
 
 public class SuperSchematic {
+    private final Clipboard clipboard;
 
-    Schematic schem;
+    public SuperSchematic(Clipboard clipboard) { this.clipboard = clipboard; }
+    public int getWidth() { return clipboard.getDimensions().x(); }
+    public int getHeight() { return clipboard.getDimensions().y(); }
+    public int getLength() { return clipboard.getDimensions().z(); }
+    public Clipboard getClipboard() { return clipboard; }
+    public BlockVector3 getSize() { return clipboard.getDimensions(); }
 
-    public SuperSchematic(Schematic schem) {
-        this.schem = schem;
-    }
-
-    public int getWidth() {
-        return getClipboard().getDimensions().getBlockX();
-    }
-
-    public int getHeight() {
-        return getClipboard().getDimensions().getBlockY();
-    }
-
-    public int getLength() {
-        return getClipboard().getDimensions().getBlockZ();
-    }
-
-    public Clipboard getClipboard() {
-        return schem.getClipboard();
-    }
-
-    public BaseBlock getBlock(Vector vector) {
-        return schem.getClipboard().getBlock(vector);
-    }
-
-    public Vector getSize() {
-        return new Vector(getWidth(), getHeight(), getLength());
+    public BaseBlock getBlock(BlockVector3 localPosition) {
+        return clipboard.getFullBlock(clipboard.getMinimumPoint().add(localPosition));
     }
 
     public SuperSchematic rotate(float angle) {
-        try {
-            angle = angle % 360;
-            if (angle % 90 != 0) { // Can only rotate 90 degrees at the moment
-                return null;
-            }
-            final boolean reverse = angle < 0;
-            final int numRotations = Math.abs((int) Math.floor(angle / 90.0));
-
-            final int width = getWidth();
-            final int length = getLength();
-            final int height = getHeight();
-            final Vector sizeRotated = getSize().transform2D(angle, 0, 0, 0, 0);
-            final int shiftX = sizeRotated.getX() < 0 ? -sizeRotated.getBlockX() - 1 : 0;
-            final int shiftZ = sizeRotated.getZ() < 0 ? -sizeRotated.getBlockZ() - 1 : 0;
-
-            Clipboard rotatedClip = new BlockArrayClipboard(new CuboidRegion(new Vector(), new Vector(Math.abs(sizeRotated.getBlockX()),
-                    Math.abs(sizeRotated.getBlockY()),
-                    Math.abs(sizeRotated.getBlockZ()))));
-
-            for (int x = 0; x < width; ++x) {
-                for (int z = 0; z < length; ++z) {
-                    final Vector2D v = new Vector2D(x, z).transform2D(angle, 0, 0, shiftX, shiftZ);
-                    final int newX = v.getBlockX();
-                    final int newZ = v.getBlockZ();
-                    for (int y = 0; y < height; ++y) {
-                        Vector schemBlockVector = new Vector(x, y, z);
-                        BaseBlock block = getBlock(schemBlockVector);
-
-                        if (block == null) {
-                            continue;
-                        }
-                        if (reverse) {
-                            for (int i = 0; i < numRotations; ++i) {
-                                block = new BaseBlock(block.getId(), BlockData.rotate90Reverse(block.getType(), block.getData()));
-                            }
-                        } else {
-                            for (int i = 0; i < numRotations; ++i) {
-                                block = new BaseBlock(block.getId(), BlockData.rotate90(block.getType(), block.getData()));
-                            }
-                        }
-
-                        rotatedClip.setBlock(new Vector(newX, y, newZ), block);
-                    }
+        if (!Float.isFinite(angle) || angle % 90 != 0) {
+            throw new IllegalArgumentException("Schematic rotation must be a multiple of 90 degrees");
+        }
+        int turns = Math.floorMod((int) (angle / 90), 4);
+        int width = getWidth(), length = getLength();
+        int newWidth = turns % 2 == 0 ? width : length;
+        int newLength = turns % 2 == 0 ? length : width;
+        BlockArrayClipboard rotated = new BlockArrayClipboard(new CuboidRegion(BlockVector3.ZERO,
+                BlockVector3.at(newWidth - 1, getHeight() - 1, newLength - 1)));
+        // Preserve the old clockwise coordinate rotation, including directional block states and NBT.
+        AffineTransform transform = new AffineTransform().rotateY(-turns * 90);
+        for (int x = 0; x < width; x++) {
+            for (int z = 0; z < length; z++) {
+                int newX = switch (turns) { case 1 -> length - 1 - z; case 2 -> width - 1 - x; case 3 -> z; default -> x; };
+                int newZ = switch (turns) { case 1 -> x; case 2 -> length - 1 - z; case 3 -> width - 1 - x; default -> z; };
+                for (int y = 0; y < getHeight(); y++) {
+                    BaseBlock block = getBlock(BlockVector3.at(x, y, z));
+                    rotated.setBlock(BlockVector3.at(newX, y, newZ), BlockTransformExtent.transform(block, transform));
                 }
             }
-
-            return new SuperSchematic(new Schematic(rotatedClip));
-        } catch (WorldEditException e) {
-            e.printStackTrace();
         }
-        return null;
+        return new SuperSchematic(rotated);
     }
 }

@@ -16,6 +16,7 @@ public class World {
     public transient boolean forceInitSave = false;
 
     public transient boolean init = false;
+    public transient Exception initializationFailure;
     public transient Database db;
     public transient DBMapData mapData;
 

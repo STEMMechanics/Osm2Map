@@ -1,8 +1,8 @@
 package com.wardenfar.osm2map.map.entity;
 
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.operation.buffer.BufferOp;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.operation.buffer.BufferOp;
 import com.wardenfar.osm2map.Util;
 import com.wardenfar.osm2map.map.DBMapData;
 

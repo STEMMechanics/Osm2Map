@@ -227,7 +227,7 @@ public class OtpCommands extends Commands {
                             double posX = pixel.x + 0.5 + (random.nextFloat() * offset * 2 - offset);
                             double posY = plugin.getElevByBlockXZ(player.getWorld().getName(), pixel.x, pixel.y) + 3 + (random.nextFloat() * offset * 2 - offset);
                             double posZ = pixel.y + 0.5 + (random.nextFloat() * offset * 2 - offset);
-                            player.spawnParticle(Particle.REDSTONE, posX, posY, posZ, 0, 183d / 256d, 28d / 256d, 28d / 256d, 1);
+                            player.spawnParticle(Particle.DUST, posX, posY, posZ, 1, new Particle.DustOptions(org.bukkit.Color.fromRGB(183, 28, 28), 1));
                         }
                     }
                     for (Vector2i pixel : effectLines) {
@@ -235,7 +235,7 @@ public class OtpCommands extends Commands {
                             double posX = pixel.x + 0.5 + (random.nextFloat() * offset * 2 - offset);
                             double posY = plugin.getElevByBlockXZ(player.getWorld().getName(), pixel.x, pixel.y) + 3 + (random.nextFloat() * offset * 2 - offset);
                             double posZ = pixel.y + 0.5 + (random.nextFloat() * offset * 2 - offset);
-                            player.spawnParticle(Particle.REDSTONE, posX, posY, posZ, 0, 3d / 256d, 169d / 256d, 244d / 256d, 1);
+                            player.spawnParticle(Particle.DUST, posX, posY, posZ, 1, new Particle.DustOptions(org.bukkit.Color.fromRGB(3, 169, 244), 1));
                         }
                     }
                 };

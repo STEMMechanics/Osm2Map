@@ -1,8 +1,8 @@
 name: "osm2map"
-version: "3.2"
+version: "${version}"
 author: "Wardenfar"
 main: "com.wardenfar.osm2map.Osm2map"
-api-version: "1.14"
+api-version: "26.2"
 
 load: STARTUP
 depend: [FastAsyncWorldEdit]

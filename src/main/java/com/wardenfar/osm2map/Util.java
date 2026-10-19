@@ -4,12 +4,12 @@ import com.flowpowered.math.vector.Vector3d;
 import com.flowpowered.math.vector.Vector3i;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.sk89q.worldedit.CuboidClipboard;
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.vividsolutions.jts.geom.Coordinate;
-import com.vividsolutions.jts.geom.Geometry;
-import com.vividsolutions.jts.geom.GeometryFactory;
+import com.wardenfar.osm2map.terrainGeneration.GenerationClipboard;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.world.block.BaseBlock;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.GeometryFactory;
 import com.wardenfar.osm2map.config.Worlds;
 import com.wardenfar.osm2map.map.entity.Vector2d;
 import com.wardenfar.osm2map.map.entity.Vector2i;
@@ -118,14 +118,14 @@ public class Util {
         return t -> seen.add(keyExtractor.apply(t));
     }
 
-    public static CuboidClipboard cloneCuboidClipboard(CuboidClipboard clip) {
-        CuboidClipboard result = new CuboidClipboard(clip.getSize(), clip.getOrigin(), clip.getOffset());
+    public static GenerationClipboard cloneGenerationClipboard(GenerationClipboard clip) {
+        GenerationClipboard result = new GenerationClipboard(clip.getSize(), clip.getOrigin(), clip.getOffset());
         for (int x = 0; x < clip.getWidth(); x++) {
             for (int z = 0; z < clip.getLength(); z++) {
                 for (int y = 0; y < clip.getHeight(); y++) {
-                    BaseBlock block = clip.getBlock(new Vector(x, y, z));
+                    BaseBlock block = clip.getBlock(BlockVector3.at(x, y, z));
                     if (block != null) {
-                        result.setBlock(new Vector(x, y, z), block);
+                        result.setBlock(BlockVector3.at(x, y, z), block);
                     }
                 }
             }
@@ -159,32 +159,46 @@ public class Util {
         Gson gson = new GsonBuilder().setPrettyPrinting().create();
         File file = new File(configFile);
         if (file.exists()) {
-            try{
-                worlds = gson.fromJson(new FileReader(file), Worlds.class);
-            }catch (Exception e){
-                worlds = null;
+            try (FileReader reader = new FileReader(file)) {
+                worlds = gson.fromJson(reader, Worlds.class);
+            } catch (com.google.gson.JsonParseException e) {
+                throw new IOException("Invalid world configuration in " + file + ": " + e.getMessage(), e);
             }
-            if(worlds == null){
-                worlds = new Worlds();
+            if (worlds == null || worlds.worlds == null) {
+                throw new IOException("Invalid world configuration in " + file + ": worlds must be an array");
+            }
+            Set<String> names = new HashSet<>();
+            for (int i = 0; i < worlds.worlds.length; i++) {
+                com.wardenfar.osm2map.config.World w = worlds.worlds[i];
+                String problem = null;
+                if (w == null) {
+                    problem = "null world entry (check for a trailing comma in the worlds array)";
+                } else if (w.name == null || w.name.isBlank()) {
+                    problem = "world name must not be blank";
+                } else if (!names.add(w.name)) {
+                    problem = "duplicate world name: " + w.name;
+                } else if (w.config == null || w.config.generation == null || w.config.guard == null
+                        || w.config.tile == null || w.config.blocks == null
+                        || w.config.generation.elevation == null || w.config.tile.blur == null) {
+                    problem = "world configuration sections must not be null";
+                }
+                if (problem != null) {
+                    throw new IOException("Invalid world configuration in " + file + " at worlds[" + i + "]: " + problem);
+                }
             }
             for (com.wardenfar.osm2map.config.World w : worlds.worlds) {
                 w.forceInitSave = w.forceInit;
                 w.forceInit = false;
             }
-            try (FileWriter writer = new FileWriter(file)) {
-                gson.toJson(worlds, writer);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
         } else {
             worlds = new Worlds();
-            file.getParentFile().mkdirs();
-            file.createNewFile();
-            try (FileWriter writer = new FileWriter(file)) {
-                gson.toJson(worlds, writer);
-            } catch (IOException e) {
-                e.printStackTrace();
+            File parent = file.getAbsoluteFile().getParentFile();
+            if (!parent.isDirectory() && !parent.mkdirs()) {
+                throw new IOException("Cannot create configuration directory: " + parent);
             }
+        }
+        try (FileWriter writer = new FileWriter(file)) {
+            gson.toJson(worlds, writer);
         }
         return worlds;
     }
@@ -292,17 +306,17 @@ public class Util {
     }
 
     public static Geometry geometryFromRectangle(double x, double y, double width, double height) {
-        return geometryFactory.createPolygon(new com.vividsolutions.jts.geom.Coordinate[]{
-                new com.vividsolutions.jts.geom.Coordinate(x, y),
-                new com.vividsolutions.jts.geom.Coordinate(x + width, y),
-                new com.vividsolutions.jts.geom.Coordinate(x + width, y + height),
-                new com.vividsolutions.jts.geom.Coordinate(x, y + height),
-                new com.vividsolutions.jts.geom.Coordinate(x, y),
+        return geometryFactory.createPolygon(new org.locationtech.jts.geom.Coordinate[]{
+                new org.locationtech.jts.geom.Coordinate(x, y),
+                new org.locationtech.jts.geom.Coordinate(x + width, y),
+                new org.locationtech.jts.geom.Coordinate(x + width, y + height),
+                new org.locationtech.jts.geom.Coordinate(x, y + height),
+                new org.locationtech.jts.geom.Coordinate(x, y),
         });
     }
 
     public static Geometry geometryFromPoint(double x, double y) {
-        return geometryFactory.createPoint(new com.vividsolutions.jts.geom.Coordinate(x, y));
+        return geometryFactory.createPoint(new org.locationtech.jts.geom.Coordinate(x, y));
     }
 
     public static Geometry geometryFromRectCorners(double minX, double minY, double maxX, double maxY) {
@@ -334,33 +348,33 @@ public class Util {
         }
     }
 
-    public static boolean isWithinDistance(com.vividsolutions.jts.geom.Geometry
-                                                   a, com.vividsolutions.jts.geom.Geometry b, double distance) {
+    public static boolean isWithinDistance(org.locationtech.jts.geom.Geometry
+                                                   a, org.locationtech.jts.geom.Geometry b, double distance) {
         return a.isWithinDistance(b, distance);
     }
 
-    public static boolean isPointWithinDistance(com.vividsolutions.jts.geom.Geometry a, double x, double y,
+    public static boolean isPointWithinDistance(org.locationtech.jts.geom.Geometry a, double x, double y,
                                                 double distance) {
         return a.isWithinDistance(geometryFactory.createPoint(new Coordinate(x, y)), distance);
     }
 
-    public static com.vividsolutions.jts.geom.Geometry buffer(com.vividsolutions.jts.geom.Geometry geometry,
+    public static org.locationtech.jts.geom.Geometry buffer(org.locationtech.jts.geom.Geometry geometry,
                                                               double distance) {
         return geometry.buffer(distance);
     }
 
-    public static boolean intersects(com.vividsolutions.jts.geom.Geometry a, com.vividsolutions.jts.geom.Geometry b) {
+    public static boolean intersects(org.locationtech.jts.geom.Geometry a, org.locationtech.jts.geom.Geometry b) {
         return a.intersects(b);
     }
 
-    public static String toViWkt(com.vividsolutions.jts.geom.Geometry geometry) {
-        return new com.vividsolutions.jts.io.WKTWriter().write(geometry);
+    public static String toViWkt(org.locationtech.jts.geom.Geometry geometry) {
+        return new org.locationtech.jts.io.WKTWriter().write(geometry);
     }
 
-    public static com.vividsolutions.jts.geom.Geometry fromViWkt(String wkt) {
+    public static org.locationtech.jts.geom.Geometry fromViWkt(String wkt) {
         try {
-            return new com.vividsolutions.jts.io.WKTReader().read(wkt);
-        } catch (com.vividsolutions.jts.io.ParseException e) {
+            return new org.locationtech.jts.io.WKTReader().read(wkt);
+        } catch (org.locationtech.jts.io.ParseException e) {
             e.printStackTrace();
             return null;
         }
@@ -388,32 +402,34 @@ public class Util {
 
     public static Map<Vector3i, Object> getBlocksColors(String externFile, Interface inter) {
         Map<Vector3i, Object> blocks = new HashMap<>();
-        try {
-            File groundBlocksFile = new File(externFile);
-            BufferedReader br;
-            br = new BufferedReader(new InputStreamReader(new FileInputStream(groundBlocksFile)));
+        try (BufferedReader reader = new BufferedReader(new FileReader(externFile))) {
             String line;
-            while ((line = br.readLine()) != null) {
-                line = line.split("#")[0].trim();
-                if (line.equals("")) {
-                    continue;
-                }
-                String[] args = line.split(" ");
-                String block = args[0];
-                String[] channels = args[1].split(",");
-
-                Object blockObject = Util.getConfigBlock(inter, block);
-
-                if (blockObject == null) {
-                    System.err.println(line);
-                }else{
-                    blocks.put(new Vector3i(Integer.parseInt(channels[0]), Integer.parseInt(channels[1]), Integer.parseInt(channels[2])), blockObject);
+            int lineNumber = 0;
+            while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                line = line.split("#", 2)[0].trim();
+                if (line.isEmpty()) continue;
+                try {
+                    String[] args = line.split("\\s+");
+                    if (args.length != 2) throw new IllegalArgumentException("expected block and R,G,B");
+                    String[] channels = args[1].split(",", -1);
+                    if (channels.length != 3) throw new IllegalArgumentException("expected three colour channels");
+                    int[] rgb = new int[3];
+                    for (int i = 0; i < 3; i++) {
+                        rgb[i] = Integer.parseInt(channels[i]);
+                        if (rgb[i] < 0 || rgb[i] > 255) throw new IllegalArgumentException("colour outside 0..255");
+                    }
+                    Object block = getConfigBlock(inter, args[0]);
+                    if (block == null) throw new IllegalArgumentException("unknown block " + args[0]);
+                    blocks.put(new Vector3i(rgb[0], rgb[1], rgb[2]), block);
+                } catch (RuntimeException e) {
+                    throw new IllegalArgumentException(externFile + ":" + lineNumber + ": " + e.getMessage(), e);
                 }
             }
-            br.close();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new IllegalArgumentException("Cannot read block colours: " + externFile, e);
         }
+        if (blocks.isEmpty()) throw new IllegalArgumentException("No block colours in " + externFile);
         return blocks;
     }
 
@@ -904,27 +920,27 @@ public class Util {
         blockMap.put("minecraft:structure_block", "255");
     }
 
-    public static void copyCuboidClipboard(CuboidClipboard schem, CuboidClipboard schemResized) {
+    public static void copyGenerationClipboard(GenerationClipboard schem, GenerationClipboard schemResized) {
         for (int x = 0; x < schem.getWidth(); x++) {
             for (int z = 0; z < schem.getLength(); z++) {
                 for (int y = 0; y < schem.getHeight(); y++) {
-                    BaseBlock block = schem.getBlock(new Vector(x, y, z));
+                    BaseBlock block = schem.getBlock(BlockVector3.at(x, y, z));
                     if (block != null) {
-                        schemResized.setBlock(new Vector(x, y, z), block);
+                        schemResized.setBlock(BlockVector3.at(x, y, z), block);
                     }
                 }
             }
         }
     }
 
-    public static CuboidClipboard copyCuboidClipboard(CuboidClipboard schem) {
-        CuboidClipboard copy = new CuboidClipboard(schem.getSize(), schem.getOrigin(), schem.getOffset());
+    public static GenerationClipboard copyGenerationClipboard(GenerationClipboard schem) {
+        GenerationClipboard copy = new GenerationClipboard(schem.getSize(), schem.getOrigin(), schem.getOffset());
         for (int x = 0; x < schem.getWidth(); x++) {
             for (int z = 0; z < schem.getLength(); z++) {
                 for (int y = 0; y < schem.getHeight(); y++) {
-                    BaseBlock block = schem.getBlock(new com.sk89q.worldedit.Vector(x, y, z));
+                    BaseBlock block = schem.getBlock(BlockVector3.at(x, y, z));
                     if (block != null) {
-                        copy.setBlock(new com.sk89q.worldedit.Vector(x, y, z), block);
+                        copy.setBlock(BlockVector3.at(x, y, z), block);
                     }
                 }
             }

@@ -1,9 +1,9 @@
 package com.wardenfar.osm2map.request;
 
-import com.sk89q.worldedit.CuboidClipboard;
-import com.sk89q.worldedit.Vector;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.vividsolutions.jts.geom.Coordinate;
+import com.wardenfar.osm2map.terrainGeneration.GenerationClipboard;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldedit.world.block.BaseBlock;
+import org.locationtech.jts.geom.Coordinate;
 import com.wardenfar.osm2map.Osm2map;
 import com.wardenfar.osm2map.map.entity.JtsZone;
 import com.wardenfar.osm2map.map.entity.Vector2i;
@@ -14,7 +14,7 @@ import net.md_5.bungee.api.chat.TextComponent;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
-import org.bukkit.material.MaterialData;
+import org.bukkit.block.data.BlockData;
 
 import java.util.List;
 
@@ -60,18 +60,18 @@ public class ZoneCreateRequest extends Request {
                 minY = (int) Math.min(minY, c.y);
                 maxY = (int) Math.max(maxY, c.y);
             }
-            int width = maxX - minX;
-            int height = maxY - minY;
-            Vector origin = new Vector(minX, 0, minY);
-            CuboidClipboard clip = new CuboidClipboard(new Vector(width, 256, height), origin);
+            int width = maxX - minX + 1;
+            int height = maxY - minY + 1;
+            BlockVector3 origin = BlockVector3.at(minX, world.getMinHeight(), minY);
+            GenerationClipboard clip = new GenerationClipboard(BlockVector3.at(width, world.getMaxHeight() - world.getMinHeight(), height), origin);
             populator.populate(worldName, clip, new SchemInterface());
             for (int x = 0; x < clip.getWidth(); x++) {
                 for (int z = 0; z < clip.getLength(); z++) {
                     for (int y = 0; y < clip.getHeight(); y++) {
-                        BaseBlock block = clip.getBlock(new Vector(x, y, z));
+                        BaseBlock block = clip.getBlock(BlockVector3.at(x, y, z));
                         if (block != null) {
-                            Object blockObject = plugin.getInterface().getBlock(block.getId(), block.getData());
-                            setBlock(world, (int) (origin.getX() + x), (int) (origin.getY() + y), (int) (origin.getZ() + z), (MaterialData) blockObject);
+                            Object blockObject = plugin.getInterface().fromBlock(block);
+                            setBlock(world, (int) (origin.x() + x), (int) (origin.y() + y), (int) (origin.z() + z), (BlockData) blockObject);
                         }
                     }
                 }
@@ -85,13 +85,12 @@ public class ZoneCreateRequest extends Request {
         sendMessage(src, "Canceled zone creation", ChatColor.LIGHT_PURPLE);
     }
 
-    private MaterialData getBlock(World world, int x, int y, int z) {
-        return world.getBlockAt(x, y, z).getState().getData();
+    private BlockData getBlock(World world, int x, int y, int z) {
+        return world.getBlockAt(x, y, z).getBlockData();
     }
 
-    private void setBlock(World world, int x, int y, int z, MaterialData block) {
+    private void setBlock(World world, int x, int y, int z, BlockData block) {
         Block b = world.getBlockAt(x,y,z);
-        b.setType(block.getItemType());
-        b.setData(block.getData());
+        b.setBlockData(block, false);
     }
 }

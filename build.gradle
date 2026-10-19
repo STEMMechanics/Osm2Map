@@ -1,16 +1,16 @@
 plugins {
     id 'java'
     id 'application'
-    id "com.github.johnrengelman.shadow" version "7.1.0"
+    id "com.gradleup.shadow" version "9.4.2"
 }
 
-mainClassName = 'com.wardenfar.osm2map.Main'
-group 'com.wardenfar.spigot'
-version '3.2'
+application { mainClass = 'com.wardenfar.osm2map.Main' }
+group = 'com.wardenfar.spigot'
+version = '4.0.0'
 
 compileJava.options.encoding = 'UTF-8'
 
-sourceCompatibility = 1.21
+java { toolchain.languageVersion = JavaLanguageVersion.of(25) }
 
 tasks.withType(JavaCompile).configureEach {
     options.deprecation = true
@@ -19,36 +19,37 @@ tasks.withType(JavaCompile).configureEach {
 repositories {
     mavenCentral()
     maven {
-        url "https://hub.spigotmc.org/nexus/content/groups/public/"
+        url = "https://hub.spigotmc.org/nexus/content/groups/public/"
     }
     maven {
-        url "https://repo.papermc.io/repository/maven-public/"
+        url = "https://repo.papermc.io/repository/maven-public/"
     }
     maven {
-        url 'https://mvn.topobyte.de'
+        url = 'https://mvn.topobyte.de'
     }
     maven {
-        url "https://mvn.slimjars.com"
+        url = "https://mvn.slimjars.com"
     }
     maven {
-        url 'https://maven.enginehub.org/repo/'
+        url = "https://maven.enginehub.org/repo/"
+        content { includeGroup "com.sk89q"; includeGroup "com.sk89q.lib" }
     }
-    maven { url = 'https://oss.sonatype.org/content/repositories/snapshots' }
-    //maven { url = 'https://oss.sonatype.org/content/repositories/central' }
 }
 
-dependencies {
-    testImplementation group: 'junit', name: 'junit', version: '4.13.1'
+configurations.testImplementation.extendsFrom(configurations.compileOnly)
+// Paper supplies the logging API and implementation.
+configurations.runtimeClasspath.exclude(group: "org.slf4j")
 
-    implementation group: 'org.spigotmc', name: 'spigot-api', version: '1.12.2-R0.1-SNAPSHOT'
+dependencies {
+    testImplementation "org.ow2.asm:asm:9.9.1"
+    testImplementation group: 'junit', name: 'junit', version: '4.13.2'
+
+    compileOnly "io.papermc.paper:paper-api:26.2.build.121-stable"
 
     implementation group: 'org.apache.commons', name: 'commons-math3', version: '3.6.1'
 
     implementation 'de.topobyte:osm4j-core:0.1.0'
-    implementation 'de.topobyte:osm4j-utils:0.1.2'
     implementation 'de.topobyte:osm4j-xml:0.1.2'
-    implementation 'de.topobyte:osm4j-pbf:0.1.1'
-    implementation 'de.topobyte:osm4j-tbo:0.1.0'
     implementation 'de.topobyte:osm4j-geometry:0.1.0'
 
     implementation files('libs/intake-spigot-4.2.35-plugin-with-xyc.jar')
@@ -58,29 +59,68 @@ dependencies {
     implementation group: 'com.flowpowered', name: 'flow-math', version: '1.0.3'
     implementation group: 'com.vividsolutions', name: 'jts-core', version: '1.14.0'
 
-    shadow 'com.sk89q.worldedit:worldedit-core:6.1'
-    implementation files('libs/jnbt-1.1.jar')
 
-    implementation group: 'org.slf4j', name: 'slf4j-simple', version: '1.7.28'
 
     implementation group: 'com.h2database', name: 'h2', version: '2.2.220'
 
-//    implementation(platform("com.intellectualsites.bom:bom-newest:1.45"))
-    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Core:2.10.0")
+    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Core:2.15.3")
+    compileOnly("com.fastasyncworldedit:FastAsyncWorldEdit-Bukkit:2.15.3")
+    implementation "com.google.code.gson:gson:2.11.0"
 
-    //compile 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.10.1'
-    //compile 'com.fasterxml.jackson.core:jackson-databind:2.10.1'
 }
 
-task copyJar(type: Copy) {
+tasks.register('copyJar', Copy) {
     from shadowJar
     into 'servers/server1/plugins'
 }
 
 shadowJar {
-    version = '3.2'
+    archiveVersion = project.version
+    mergeServiceFiles()
     relocate 'org.apache.commons', 'com.wardenfar.shade.org.apache.common'
     relocate 'de.topobyte', 'com.wardenfar.shade.de.topobyte'
 }
 
-task buildApp (dependsOn: [shadowJar, copyJar])
+tasks.register('buildApp') { dependsOn shadowJar, copyJar }
+processResources {
+    inputs.property "version", project.version
+    filesMatching("plugin.yml") { expand(version: project.version) }
+}
+
+tasks.register('verifyPluginJar') {
+    dependsOn shadowJar
+    inputs.file(shadowJar.archiveFile)
+    def expectedVersion = project.version.toString()
+    doLast {
+        new java.util.zip.ZipFile(shadowJar.archiveFile.get().asFile).withCloseable { jar ->
+            def entries = java.util.Collections.list(jar.entries())
+            def descriptors = entries.findAll { it.name == 'plugin.yml' }
+            assert descriptors.size() == 1 : 'Expected exactly one plugin descriptor'
+            def descriptor = jar.getInputStream(descriptors.first()).getText('UTF-8')
+            assert descriptor.contains('main: "com.wardenfar.osm2map.Osm2map"')
+            assert descriptor.contains('api-version: "26.2"')
+            assert descriptor.contains('version: "' + expectedVersion + '"')
+            assert !entries.any { entry ->
+                ['org/bukkit/', 'com/sk89q/worldedit/', 'com/fastasyncworldedit/', 'org/slf4j/'].any {
+                    entry.name.startsWith(it)
+                }
+            } : 'Server-owned API classes must not be bundled'
+        }
+    }
+}
+check.dependsOn verifyPluginJar
+
+tasks.register('verifyStandaloneConfig', JavaExec) {
+    dependsOn shadowJar
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    classpath = files(shadowJar.archiveFile)
+    mainClass = application.mainClass
+    def configFile = layout.buildDirectory.file('compatibility-config/config.json')
+    args configFile.get().asFile.absolutePath
+    doFirst { configFile.get().asFile.delete() }
+    doLast {
+        def config = new groovy.json.JsonSlurper().parse(configFile.get().asFile)
+        assert config.worlds[0].config.blocks.groundTopBlock == 'minecraft:grass_block'
+    }
+}
+check.dependsOn verifyStandaloneConfig

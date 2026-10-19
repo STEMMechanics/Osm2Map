@@ -1,6 +1,6 @@
 package com.wardenfar.osm2map.map.entity;
 
-import com.vividsolutions.jts.geom.Geometry;
+import org.locationtech.jts.geom.Geometry;
 
 public class JtsMapElement {
 

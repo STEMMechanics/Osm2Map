@@ -7,6 +7,13 @@
 
 # Config Documentation
 
+Block values accept modern names and states, for example
+`minecraft:oak_stairs[facing=east,half=bottom]`. Existing numeric values such as
+`35:8` and legacy names such as `minecraft:planks:2` are translated through FAWE's
+legacy mapper. Legacy names retain their old meaning; use an explicit state
+(e.g. `minecraft:stone_slab[type=bottom]`) to disambiguate a name shared with an old
+block. Invalid values raise an error instead of silently substituting air.
+
 ```json5
 {
     "worlds": [
@@ -53,14 +60,14 @@
                 },
                 "blocks": { // Generation Blocks Settings
                     "wayBlock": "minecraft:coal_block",
-                    "wayBorderBlock": "minecraft:stone_slab",
-                    "wayTrackBlock": "minecraft:planks",
+                    "wayBorderBlock": "minecraft:smooth_stone_slab",
+                    "wayTrackBlock": "minecraft:oak_planks",
                     "buildingsBorderBlock": "minecraft:cobblestone",
-                    "buildingsCornerBlock": "minecraft:stonebrick",
-                    "buildingsFillBlock": "minecraft:planks",
-                    "gardensCornerBlock": "minecraft:fence",
-                    "gardensBorderBlock": "minecraft:leaves",
-                    "groundTopBlock": "minecraft:grass",
+                    "buildingsCornerBlock": "minecraft:stone_bricks",
+                    "buildingsFillBlock": "minecraft:oak_planks",
+                    "gardensCornerBlock": "minecraft:oak_fence",
+                    "gardensBorderBlock": "minecraft:oak_leaves[persistent=true]",
+                    "groundTopBlock": "minecraft:grass_block",
                     "groundMiddleBlock": "minecraft:dirt",
                     "groundBottomBlock": "minecraft:bedrock",
                     "waterWaysBlock": "minecraft:water"

@@ -61,8 +61,6 @@ import static com.wardenfar.osm2map.Util.sendMessage;
 
 public class Osm2map extends JavaPlugin implements Listener {
 
-    public static String VERSION = "4.0.0";
-
     public static int POI_PAGE_SIZE = 15;
 
     public static String configFile = "plugins/osm2map/config/config.json";

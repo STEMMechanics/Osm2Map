@@ -19,6 +19,6 @@ public class O2mCommands extends Commands {
             usage = ""
     )
     public void help(@Sender Player player) {
-        sendMessage(player, "Osm2Map " + Osm2map.VERSION + " by Wardenfar");
+        sendMessage(player, "Osm2Map " + plugin.getPluginMeta().getVersion() + " by Wardenfar");
     }
 }

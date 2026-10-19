@@ -50,6 +50,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import java.awt.Color;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -71,6 +72,8 @@ public class Osm2map extends JavaPlugin implements Listener {
     private Map<String, Map<Class<?>, Map<Vector3i, Object>>> blocksByWorld = new java.util.concurrent.ConcurrentHashMap<>();
 
     private OsmElevGenerator osmElevGenerator;
+
+    private boolean guardMaskManagerRegistered;
 
     private RequestManager requestManager;
 
@@ -321,7 +324,7 @@ public class Osm2map extends JavaPlugin implements Listener {
 
             for (World world : worlds.worlds) {
                 if (isGuardActive(world)) {
-                    FaweAPI.addMaskManager(new ZoneMaskManager(this));
+                    ensureGuardMaskManager();
                     break;
                 }
             }
@@ -332,6 +335,25 @@ public class Osm2map extends JavaPlugin implements Listener {
             return;
         }
         getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    public synchronized void setGuardActive(String worldName, boolean active) throws IOException {
+        World world = worlds.getWorld(worldName);
+        if (world == null) {
+            throw new IOException("World is not configured: " + worldName);
+        }
+        world.config.guard.active = active;
+        Util.writeWorldsJson(configFile, worlds);
+        if (active) {
+            ensureGuardMaskManager();
+        }
+    }
+
+    private synchronized void ensureGuardMaskManager() {
+        if (!guardMaskManagerRegistered) {
+            FaweAPI.addMaskManager(new ZoneMaskManager(this));
+            guardMaskManagerRegistered = true;
+        }
     }
 
     public synchronized void initWorld(String worldName) {
